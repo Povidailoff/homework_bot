@@ -1,3 +1,4 @@
+import json
 import os
 import logging
 import time
@@ -48,7 +49,7 @@ def check_tokens():
 
     for token in required_tokens:
         if globals()[token] is None:
-            logging.critical(f'Missed required token:{token}')
+            logger.critical(f'Missed required token:{token}')
             missed_tokens.append(token)
 
     if len(missed_tokens) > 0:
@@ -62,9 +63,11 @@ def send_message(bot, message):
     """
     try:
         bot.send_message(TELEGRAM_CHAT_ID, message)
-        logging.info('Message received!')
+        logger.info('Message received!')
+    except telegram.TelegramError as error:
+        logger.error(f'Something wrong with TG {error}')
     except Exception as error:
-        logging.error(f'Message don`t received! {error}')
+        logger.error(f'Message don`t received! {error}')
 
 
 def get_api_answer(current_timestamp):
@@ -78,14 +81,29 @@ def get_api_answer(current_timestamp):
             params=params
         )
         if response.status_code == HTTPStatus.OK:
-            logging.info('exit get_api_answer')
             return response.json()
         else:
-            raise ConnectionError('Wrong response status')
+            raise ConnectionError('Wrong response status.')
 
-    except Exception as error:
-        logging.error(f'Error when requesting to API: {error}')
-        raise ConnectionError(error)
+    except requests.exceptions.HTTPError as error:
+        logger.error(f'Http Error: {error}')
+        raise requests.exceptions.HTTPError(f'Http Error: {error}')
+
+    except requests.exceptions.ConnectionError as error:
+        logger.error(f'Error Connecting: {error}')
+        raise requests.exceptions.ConnectionError(f'Error Connecting: {error}')
+
+    except requests.exceptions.Timeout as error:
+        logger.error(f'Timeout Error: {error}')
+        raise requests.exceptions.Timeout(f'Timeout Error: {error}')
+
+    except requests.exceptions.RequestException as error:
+        logger.error(f'Something wrong {error}')
+        raise requests.exceptions.RequestException(f'Something wrong {error}')
+
+    except json.JSONDecodeError as error:
+        logger.error(f'Something wrong {error}')
+        raise json.JSONDecodeError('JSON decoding failure.')
 
 
 def check_response(response):
@@ -95,13 +113,13 @@ def check_response(response):
     """
     sample_set = {'homeworks', 'current_date'}
     missed_data = sample_set - set(response)
+    if missed_data:
+        logger.error(f'Not enough data in the API response:{missed_data}')
+        raise KeyError('There is not enough data in the API response.')
     if type(response['homeworks']) != list:
-        logging.error('Wrong type of API homeworks')
+        logger.error('Wrong type of API homeworks')
         raise TypeError('Type homeworks is not list')
-    if not missed_data:
-        return response['homeworks']
-    logging.error(f'Not enough data in the API response:{missed_data}')
-    raise ValueError('There is not enough data in the API response.')
+    return response['homeworks']
 
 
 def parse_status(homework):
@@ -110,7 +128,7 @@ def parse_status(homework):
         homework_name = homework['homework_name']
         homework_status = homework['status']
     except KeyError as error:
-        logging.error(f'In homework missed key {error}')
+        logger.error(f'In homework missed key {error}')
         raise KeyError(f'Missed key in homework {error}.')
     try:
         verdict = HOMEWORK_STATUSES[homework_status]
@@ -134,12 +152,12 @@ def main():
             response = parse_status(homework)
 
         except IndexError:
-            logging.debug('0 Updates in homeworks')
-            response = ''
+            logger.debug('0 Updates in homeworks')
+            response = None
 
         except Exception as error:
             response = f'Сбой в работе программы: {error}'
-            logging.error(response)
+            logger.error(response)
 
         if last_message != response and response is not None:
             send_message(bot, response)
