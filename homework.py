@@ -116,7 +116,7 @@ def check_response(response):
     if missed_data:
         logger.error(f'Not enough data in the API response:{missed_data}')
         raise KeyError('There is not enough data in the API response.')
-    if type(response['homeworks']) != list:
+    if type(response['homeworks']) is not list:
         logger.error('Wrong type of API homeworks')
         raise TypeError('Type homeworks is not list')
     return response['homeworks']
